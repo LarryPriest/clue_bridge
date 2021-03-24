@@ -1,2 +1,2 @@
 # clue_bridge
-repository for clue -> PI -> adafruit.io proje ct
+repository for clue -> PI -> adafruit.io project
