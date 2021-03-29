@@ -22,6 +22,8 @@ import struct
 import msmts  # msmts contains a dict of mesurement codes and data format
 
 trans_meas = msmts.measure # get the codes
+macaddr = secrets["macaddr"]
+print("mac address", macaddr)
     
 ble = BLERadio()
 bridge_address = adafruit_ble_broadcastnet.device_address
@@ -134,83 +136,85 @@ while True:
     try:
         for advertisement in ble.start_scan(): # this one sort of works
             sensor_address = advertisement.address.string.replace(":","")
-            if sensor_address != "fbe1236b2b9f":
-                continue
-            if advertisement.scan_response and sensor_address not in scan_responses:
-                scan_responses.add(sensor_address)
-            elif not advertisement.scan_response and sensor_address not in found:
-                found.add(sensor_address)
-            else:
-                pass
+            if sensor_address in macaddr:
+                print("found: ", sensor_address)
+               
+                if advertisement.scan_response and sensor_address not in scan_responses:
+                    scan_responses.add(sensor_address)
+                elif not advertisement.scan_response and sensor_address not in found:
+                    found.add(sensor_address)
+                else:
+                    pass
+               
 
             # prepare for data extraction
-            feed_data = []
-            try:   # try this except if we get a KeyError i.e. if the data_dict[255] not exixt
-                start = 1 # because 0 (the first byte of the data_dict is wrong
-                dd = advertisement.data_dict[255] # key[255] is data fleld 
-                sm: bytes = dd[start:len(dd)]  # extract as bytes the start to end of dd
-                
-                while len(sm) > 3: # the last entery of dd will be a sequence number(2bytes for code one for value
-                    start_index = sm[1] # total bytes
-                    fd = sm[2],sm[3]  # first measurment code
-                    tt = bytes(fd).hex()  # convert bytes to hex
-                    try:
-                        mt = trans_meas[tt][0] # check to see if valid code
-                    except KeyError:
-                        print("mesurement not found")
+                feed_data = []
+                try:   # try this except if we get a KeyError i.e. if the data_dict[255] not exixt
+                    start = 1 # because 0 (the first byte of the data_dict is wrong
+                    dd = advertisement.data_dict[255] # key[255] is data fleld 
+                    sm: bytes = dd[start:len(dd)]  # extract as bytes the start to end of dd
                     
-                    else: # found a code so get the data format & extract the data correctly
-                        # ~ c = trans_meas[tt][1]
-                        val = struct.unpack(trans_meas[tt][1], bytes(sm[4:(sm[1]+2)]))
-                        if len(val) == 1:
-                            if trans_meas[tt][1] =='B':  # checking for byte seq # **need to fix the sqn and missednum stuff.
-                                sn = int(val[0])
-                                print('Seq.#: ', sn)
+                    while len(sm) > 3: # the last entery of dd will be a sequence number(2bytes for code one for value
+                        start_index = sm[1] # total bytes
+                        fd = sm[2],sm[3]  # first measurment code
+                        tt = bytes(fd).hex()  # convert bytes to hex
+                        try:
+                            mt = trans_meas[tt][0] # check to see if valid code
+                        except KeyError:
+                            print("measurement not found")
+                        
+                        else: # found a code so get the data format & extract the data correctly
+                            # ~ c = trans_meas[tt][1]
+                            val = struct.unpack(trans_meas[tt][1], bytes(sm[4:(sm[1]+2)]))
+                            if len(val) == 1:
+                                if trans_meas[tt][1] =='B':  # checking for byte seq # **need to fix the sqn and missednum stuff.
+                                    sn = int(val[0])
+                                    print('Seq.#: ', sn)
+                                else:
+                                    val = val[0]
+                                    feed_data.append({"key":mt, "value":val})
                             else:
-                                val = val[0]
-                                feed_data.append({"key":mt, "value":val})
-                        else:
-                            var = ("x", "y", "z")
-                            for x in range(len(val)):
-                                feed_data.append({"key":mt+'-'+var[x], 'value':val[x]})
+                                var = ("x", "y", "z")
+                                for x in range(len(val)):
+                                    feed_data.append({"key":mt+'-'+var[x], 'value':val[x]})
 
-                    sm = sm[(start + sm[1]):len(sm)] # drop the processed data from list
-                    
-            except KeyError: 
-                pass
-            data = feed_data
-            if sensor_address not in sequence_numbers:
-                # ~ sequence_numbers[sensor_address] = sn
-                number_missed = 0
-            else:
-                if not (sn == (sequence_numbers[sensor_address] + 1)) :
-                    number_missed = sn - sequence_numbers[sensor_address]
-                    print( 'We have missed: ', number_missed, 'packets')
-                    print('old seq. number:', sequence_numbers[sensor_address],
-                            'new seq. # :', sn)
+                        sm = sm[(start + sm[1]):len(sm)] # drop the processed data from list
+                        
+                except KeyError: 
+                    pass
+                data = feed_data
+                if sensor_address not in sequence_numbers:
                     # ~ sequence_numbers[sensor_address] = sn
                     number_missed = 0
-                    
-            group_key = "bridge-{}-sensor-{}".format(bridge_address, sensor_address)
-            if sensor_address not in existing_feeds:
-                print("sensor not in existing feeds")
-                create_group("Bridge {} Sensor {}".format(bridge_address, sensor_address))
-                create_feed(group_key, "Missed Message Count")
-                existing_feeds[sensor_address] = ["missed-message-count"]
-            # ~ print("exissting feeds", existing_feeds)   
-            for feed_data in data:
-                if feed_data["key"] not in existing_feeds[sensor_address]:
-                    print("creating feed", feed_data['key'])
-                    create_feed(group_key, feed_data["key"])
-                    existing_feeds[sensor_address].append(feed_data["key"])
-            
-    # Only update the previous sequence if we logged successfully.
-            start_time = time.monotonic()
-            if create_data(group_key, data):
-                sequence_numbers[sensor_address] = sn
-            duration = time.monotonic() - start_time
-            print("Done logging measurement to IO. Took {:.6f} seconds".format(duration))
-            print()
+                else:
+                    if not (sn == (sequence_numbers[sensor_address] + 1)) :
+                        number_missed = sn - sequence_numbers[sensor_address]
+                        print( 'We have missed: ', number_missed, 'packets')
+                        print('old seq. number:', sequence_numbers[sensor_address],
+                                'new seq. # :', sn)
+                        # ~ sequence_numbers[sensor_address] = sn
+                        number_missed = 0
+                start_time = time.monotonic()
+                group_key = "bridge-{}-sensor-{}".format(bridge_address, sensor_address)
+                if sensor_address not in existing_feeds:
+                    print("sensor not in existing feeds")
+                    create_group("Bridge {} Sensor {}".format(bridge_address, sensor_address))
+                    create_feed(group_key, "Missed Message Count")
+                    existing_feeds[sensor_address] = ["missed-message-count"]
+                # ~ print("exissting feeds", existing_feeds)   
+                for feed_data in data:
+                    if feed_data["key"] not in existing_feeds[sensor_address]:
+                        print("creating feed", feed_data['key'])
+                        create_feed(group_key, feed_data["key"])
+                        existing_feeds[sensor_address].append(feed_data["key"])
+                
+        # Only update the previous sequence if we logged successfully.
+               
+                # if create_data(group_key, data):
+                    # sequence_numbers[sensor_address] = sn
+                duration = time.monotonic() - start_time
+                print("Done logging measurement to IO. Took {:.6f} seconds".format(duration))
+                print()
     except KeyboardInterrupt:
         print(' \n \n')
         break
