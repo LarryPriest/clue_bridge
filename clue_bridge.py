@@ -35,7 +35,7 @@ aio_base_url = "https://io.adafruit.com/api/v2/" + secrets["aio_username"]
 
 def aio_post(path, **kwargs):
     kwargs["headers"] = aio_auth_header
-    # ~ print("posting stuff")
+    print("posting stuff")
     return requests.post(aio_base_url + path, **kwargs)
 
 
@@ -201,7 +201,7 @@ while True:
                     create_group("Bridge {} Sensor {}".format(bridge_address, sensor_address))
                     create_feed(group_key, "Missed Message Count")
                     existing_feeds[sensor_address] = ["missed-message-count"]
-                # ~ print("exissting feeds", existing_feeds)   
+                # ~ print("existing feeds", existing_feeds)   
                 for feed_data in data:
                     if feed_data["key"] not in existing_feeds[sensor_address]:
                         print("creating feed", feed_data['key'])
@@ -210,8 +210,8 @@ while True:
                 
         # Only update the previous sequence if we logged successfully.
                
-                # if create_data(group_key, data):
-                    # sequence_numbers[sensor_address] = sn
+                if create_data(group_key, data):
+                    sequence_numbers[sensor_address] = sn
                 duration = time.monotonic() - start_time
                 print("Done logging measurement to IO. Took {:.6f} seconds".format(duration))
                 print()
