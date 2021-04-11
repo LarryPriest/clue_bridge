@@ -20,31 +20,33 @@ import adafruit_ble
 # ~ from adafruit_ble import advertising
 import struct
 import msmts  # msmts contains a dict of mesurement codes and data format
-
-trans_meas = msmts.measure # get the codes
-macaddr = secrets["macaddr"]
-print("mac address", macaddr)
+# Get my list of measurement codes and sensors.
+trans_meas = msmts.measure # get the codes for each measurment
+macaddr = secrets["macaddr"]  # MAC Address for each sensor pack
+print("mac address", macaddr)  # print them all so we know which ones are being scanned for
     
 ble = BLERadio()
 bridge_address = adafruit_ble_broadcastnet.device_address
 print("This is BroadcastNet bridge:", bridge_address)
 
+# io. adafruit creds.
 aio_auth_header = {"X-AIO-KEY": secrets["aio_key"]}
 aio_base_url = "https://io.adafruit.com/api/v2/" + secrets["aio_username"]
 
-
 def aio_post(path, **kwargs):
+    '''Post the data collected'''
     kwargs["headers"] = aio_auth_header
     print("posting stuff")
     return requests.post(aio_base_url + path, **kwargs)
 
-
 def aio_get(path, **kwargs):
+    '''Get the existing data feeds'''
     kwargs["headers"] = aio_auth_header
     # ~ print("getting stuff")
     return requests.get(aio_base_url + path, **kwargs)
     
 def create_group(name):
+    '''Create a groub if the sensor package is not found'''
     response = aio_post("/groups", json={"name": name})
     if response.status_code != 201:
         print(name)
@@ -53,12 +55,11 @@ def create_group(name):
         raise RuntimeError("unable to create new group")
     return response.json()["key"]
 
-
 def create_feed(group_key, name):
+    '''Create a new data feed if one does not exist for our sensor'''
     # ~ print("creating feed\n", name)
     response = aio_post(
-        "/groups/{}/feeds".format(group_key), json={"feed": {"name": name}}
-    )
+        "/groups/{}/feeds".format(group_key), json={"feed": {"name": name}})
     if response.status_code != 201:
         print(name)
         print(response.content)
@@ -66,8 +67,8 @@ def create_feed(group_key, name):
         raise RuntimeError("unable to create new feed")
     return response.json()["key"]
 
-
 def create_data(group_key, data):
+    '''Create the data blob to be sent to io.adafruit.com. '''
     print("getting ready to post:", group_key)
     for i in data:
         print( '{} : {:.2f}'.format(i['key'], i['value']))
@@ -81,13 +82,12 @@ def create_data(group_key, data):
     response.close()
     return True
 
-
 def convert_to_feed_data(values, attribute_name, attribute_instance):
+    '''Convert the Python data to io.adafruit format '''
     feed_data = []
     # Wrap single value entries for enumeration.
     if not isinstance(values, tuple) or (
-        attribute_instance.element_count > 1 and not isinstance(values[0], tuple)
-    ):
+        attribute_instance.element_count > 1 and not isinstance(values[0], tuple)):
         values = (values,)
     for i, value in enumerate(values):
         key = attribute_name.replace("_", "-") + "-" + str(i)
@@ -103,13 +103,14 @@ def convert_to_feed_data(values, attribute_name, attribute_instance):
             feed_data.append({"key": key, "value": value})
     return feed_data
 
-
+# Print a starting message
+# gotta move this to a function?? maybe
+# +++
 print()
 print("scanning")
 found = set()
 scan_responses = set()
 print("Fetching existing feeds.")
-
 existing_feeds = {}
 response = aio_get("/groups")
 print("response\n",response)
@@ -129,7 +130,8 @@ for group in response.json():
         existing_feeds[sensor_address].append(feed_key)
 
 print("existing feeds:\n",existing_feeds)
-sequence_numbers = {}
+# +++
+sequence_numbers = {}  # does not have to be a list
 print("scanning...")
 while True:
     
