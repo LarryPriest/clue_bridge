@@ -10,16 +10,10 @@ import sys
 import time
 from secrets import secrets
 import requests
-#from adafruit_ble.advertising import Advertisement
-# ~ from adafruit_ble.advertising.standard import ProvideServicesAdvertisement
-# ~ from adafruit_ble.advertising import Advertisement, LazyObjectField
-# ~ from adafruit_ble.advertising.standard import ManufacturerData, ManufacturerDataField
 import adafruit_ble_broadcastnet
 import adafruit_ble
-# ~ from adafruit_ble_broadcastnet import AdafruitSensorMeasurement
-# ~ from adafruit_ble import advertising
 import struct
-import msmts  # msmts contains a dict of mesurement codes and data format
+import msmts  # msmts contains a dict of measurement codes and data formats.
 # Get my list of measurement codes and sensors.
 trans_meas = msmts.measure # get the codes for each measurment
 macaddr = secrets["macaddr"]  # MAC Address for each sensor pack
@@ -94,10 +88,7 @@ def convert_to_feed_data(values, attribute_name, attribute_instance):
         if isinstance(value, tuple):
             for j in range(attribute_instance.element_count):
                 feed_data.append(
-                    {
-                        "key": key + "-" + attribute_instance.field_names[j],
-                        "value": value[j],
-                    }
+                    {"key": key + "-" + attribute_instance.field_names[j], "value": value[j],}
                 )
         else:
             feed_data.append({"key": key, "value": value})
@@ -148,7 +139,6 @@ while True:
                 else:
                     pass
                
-
             # prepare for data extraction
                 feed_data = []
                 try:   # try this except if we get a KeyError i.e. if the data_dict[255] not exixt
@@ -164,7 +154,6 @@ while True:
                             mt = trans_meas[tt][0] # check to see if valid code
                         except KeyError:
                             print("measurement not found")
-                        
                         else: # found a code so get the data format & extract the data correctly
                             # ~ c = trans_meas[tt][1]
                             val = struct.unpack(trans_meas[tt][1], bytes(sm[4:(sm[1]+2)]))
@@ -210,8 +199,7 @@ while True:
                         create_feed(group_key, feed_data["key"])
                         existing_feeds[sensor_address].append(feed_data["key"])
                 
-        # Only update the previous sequence if we logged successfully.
-               
+        # Only update the previous sequence if we logged successfully.              
                 if create_data(group_key, data):
                     sequence_numbers[sensor_address] = sn
                 duration = time.monotonic() - start_time
