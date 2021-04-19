@@ -128,11 +128,12 @@ def retrieve_existing_feeds():
             existing_feeds[sensor_address].append(feed_key)
 
     print("existing feeds:\n", existing_feeds)
+    return existing_feeds
 
 
 sequence_numbers = {}  # does not have to be a list
 
-retrieve_existing_feeds()
+existing_feeds = retrieve_existing_feeds()
 print("scanning for sensors")
 while True:
 
@@ -142,12 +143,12 @@ while True:
             if sensor_address in macaddr:
                 print("found: ", sensor_address)
 
-                if advertisement.scan_response and sensor_address not in scan_responses:
-                    scan_responses.add(sensor_address)
-                elif not advertisement.scan_response and sensor_address not in found:
-                    found.add(sensor_address)
-                else:
-                    pass
+#                 if advertisement.scan_response and sensor_address not in scan_responses:
+#                     scan_responses.add(sensor_address)
+#                 elif not advertisement.scan_response and sensor_address not in found:
+#                     found.add(sensor_address)
+#                 else:
+#                     pass
 
             # prepare for data extraction
                 feed_data = []
@@ -223,7 +224,7 @@ while True:
 
 print("scan done")
 ble.stop_scan()
-print("found:\n", found)
+# print("found:\n", found)
 print()
 print("responses:\n", scan_responses)
 print("sequence_numbers:\n", sequence_numbers)
