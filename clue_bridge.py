@@ -135,6 +135,8 @@ def retrieve_existing_feeds():
     print("existing feeds:\n", existing_feeds)
     return existing_feeds
 
+class collect_data():
+    pass
 
 sequence_numbers = {}  # does not have to be a list
 
