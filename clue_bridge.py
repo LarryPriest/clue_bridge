@@ -32,7 +32,12 @@ def aio_post(path, **kwargs):
     '''Post the data collected'''
     kwargs["headers"] = aio_auth_header
     print("posting stuff")
-    return requests.post(aio_base_url + path, **kwargs)
+    temp_response = False
+    try:
+        temp_response = requests.post(aio_base_url + path, **kwargs)
+    except:
+        print('No joy in post ville')
+    return temp_response
 
 
 def aio_get(path, **kwargs):
