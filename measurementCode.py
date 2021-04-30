@@ -6,7 +6,7 @@ Larry T. Priest - larrytpriest@gmail.com
 used for receiving data from centrals on BLE
 '''
 
-measure = {
+measurement = {
     '040a': ("temperature", "f"),
     '010a': ("magnetic", "fff"),
     '0300': ("sequence-number", "B"),
