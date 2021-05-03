@@ -1,10 +1,10 @@
 #!/usr/bin/python3
-# This example scans for any BLE advertisements and prints one advertisement and
-# one scan response from every device found. This scan is more detailed than the
-# simple test because it includes specialty advertising types.  from:
-# https://circuitpython.readthedocs.io/projects/ble/en/latest/examples.html#detailed-scan
-# started on nov 23/2020 - LTP
-
+'''This example scans for any BLE advertisements and prints one advertisement and
+one scan response from every device found. This scan is more detailed than the
+simple test because it includes specialty advertising types.  from:
+https://circuitpython.readthedocs.io/projects/ble/en/latest/examples.html#detailed-scan
+started on nov 23/2020 - LTP
+'''
 from adafruit_ble import BLERadio
 import sys
 import time
@@ -135,18 +135,24 @@ def collect_data(data_bytes):
     '''Convert the byte stream data to a dict. '''
 
     feed_data = []
-    # to skip over the mfg ID and other codes(assumend to be for device type?)
-    start = 6
+    start = 2
     measurementBytes: bytes = data_bytes[start:len(data_bytes)]
-
     while len(measurementBytes) > 3:
         bytecode = measurementBytes[1], measurementBytes[2]
         code = bytes(bytecode).hex()
-        print('measurement', measurement[code])
-        value = struct.unpack_from(measurement[code][
-            1], measurementBytes, offset=3)
-        measurementBytes = measurementBytes[3+(len(measurement[code][1])*4):]
-        feed_data.append({"key": measurement[code][0], "value": value})
+        if code in measurement:
+            if measurement[code][1] == 'B':
+                value = struct.unpack_from(measurement[code][
+                    1], measurementBytes, offset=3)
+                measurementBytes = measurementBytes[3+(len(measurement[code][1])):]
+            else:
+                value = struct.unpack_from(measurement[code][
+                    1], measurementBytes, offset=3)
+                measurementBytes = measurementBytes[3+(len(measurement[code][1])*4):]
+
+            feed_data.append({"key": measurement[code][0], "value": value})
+        else:
+            raise KeyError
     print('finished collectiong data')
     return feed_data
 
@@ -154,57 +160,75 @@ def collect_data(data_bytes):
 def main():
     existing_feeds = retrieve_existing_feeds()
     sequence_numbers = {}
+    for addr in macaddr:
+        sequence_numbers[addr] = 0
     print("scanning for sensors")
-    # sequence_number = 0  # does not have to be a list
     while True:
 
         try:
+            number_missed = 0
             for advertisement in ble.start_scan():  # this one sort of works
                 sensor_address = advertisement.address.string.replace(":", "")
                 if sensor_address in macaddr:
-                    print("found: ", sensor_address)
-                    try:   # except KeyError ie. if the data_dict[255] not exixt
-                        data = collect_data(advertisement.data_dict[255])
-                    except KeyError:
-                        continue
-                    print('data: \n', data)
+                    try:   # except KeyError used to break out of try loop
+                        group_key = "bridge-{}-sensor-{}".format(
+                            bridge_address, sensor_address)
+                        if sensor_address not in existing_feeds:
+                            print("sensor not in existing feeds", sensor_address)
+                            create_group("Bridge {} Sensor {}".format(
+                                bridge_address, sensor_address))
+                            create_feed(group_key, "Missed Message Count")
+                            existing_feeds[sensor_address] = ["missed-message-count"]
+                            sequence_numbers[sensor_address] = 0
+                        bytecode = advertisement.data_dict[255][3], advertisement.data_dict[255][4]
+                        code = bytes(bytecode).hex()
+                        if code not in measurement:
+                            print('no valid measurement code')
+                            raise KeyError
 
-                    if sensor_address not in sequence_numbers:
-                        # ~ sequence_numbers[sensor_address] = sn
-                        number_missed = 0
-                    else:
-                        if not (data['sequence_number'] == (sequence_numbers[sensor_address] + 1)):
-                            number_missed = data['sequence_number'] - \
-                                sequence_numbers[sensor_address]
+                        sequence_number = struct.unpack_from(
+                            'B', advertisement.data_dict[255], offset=5)
+                        sequence_number = sequence_number[0]
+
+                        if sequence_number == sequence_numbers[sensor_address]:
+                            raise KeyError  # done this one
+                        elif sequence_number == (sequence_numbers[sensor_address] + 1):
+                            sequence_numbers[sensor_address] = sequence_number
+
+                        else:
+                            number_missed = (sequence_number -
+                                             sequence_numbers[sensor_address])
                             print('We have missed: ', number_missed, 'packets')
                             print('old seq. number:', sequence_numbers[sensor_address],
-                                  'new seq. # :', data['sequence_number'])
+                                  'new seq. # :', sequence_number)
+                            sequence_numbers[sensor_address] = sequence_number
 
-                            number_missed = data['sequence_number'] - \
-                                sequence_numbers[sensor_address]
-                    start_time = time.monotonic()
-                    group_key = "bridge-{}-sensor-{}".format(
-                        bridge_address, sensor_address)
-                    if sensor_address not in existing_feeds:
-                        print("sensor not in existing feeds")
-                        create_group("Bridge {} Sensor {}".format(
-                            bridge_address, sensor_address))
-                        create_feed(group_key, "Missed Message Count")
-                        existing_feeds[sensor_address] = ["missed-message-count"]
+                        print('done our checks')
+                        data = collect_data(advertisement.data_dict[255])
+                        data.append({"key": 'missed-message-count', "value": number_missed})
+                        print('data collected:', data)
+                        number_missed = 0
 
-                    for feed_data in data:
-                        if feed_data["key"] not in existing_feeds[sensor_address]:
-                            print("creating feed", feed_data['key'])
-                            create_feed(group_key, feed_data["key"])
-                            existing_feeds[sensor_address].append(feed_data["key"])
+                        for feed_data in data:
+                            if feed_data["key"] not in existing_feeds[sensor_address]:
+                                print("creating feed", feed_data['key'])
+                                create_feed(group_key, feed_data["key"])
+                                existing_feeds[sensor_address].append(feed_data["key"])
+                                start_time = time.monotonic()
 
-                    print('data:\n', data)
-            # Only update the previous sequence if we logged successfully.
-                    if create_data(group_key, data):
-                        sequence_numbers[sensor_address] = data['sequence_number']
-                    duration = time.monotonic() - start_time
-                    print("Done logging msmts. to IO. Took {:.6f} seconds"
-                          .format(duration))
+                                print('data:\n', data)
+                            # Only update the previous sequence if we logged successfully.
+                            if create_data(group_key, data):
+                                sequence_numbers[sensor_address] = data['sequence_number']
+                            duration = time.monotonic() - start_time
+                            print("Done logging msmts. to IO. Took {:.6f} seconds"
+                                  .format(duration))
+                        else:
+                            print('missed something')
+                            continue
+
+                    except KeyError:
+                        continue
 
                     print()
         except KeyboardInterrupt:
@@ -216,8 +240,5 @@ if __name__ == '__main__':
     main()
 print("scan done")
 ble.stop_scan()
-# print("found:\n", found)
 print('End It')
-# print("responses:\n", scan_responses)
-# print("sequence_numbers:\n", sequence_numbers)
 sys.exit()
