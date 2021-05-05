@@ -187,9 +187,9 @@ def main():
                             create_feed(group_key, "Missed Message Count")
                             existing_feeds[sensor_address] = ["missed-message-count"]
                             sequence_numbers[sensor_address] = 0
+                        # checking for sequence number current the first data item
                         bytecode = advertisement.data_dict[255][3], advertisement.data_dict[255][4]
                         code = bytes(bytecode).hex()
-                        # checking for sequence number current the first data item
                         if code not in measurement:
                             print('no valid measurement code')
                             raise KeyError
@@ -199,7 +199,8 @@ def main():
                         sequence_number = sequence_number[0]
 
                         if sequence_number == sequence_numbers[sensor_address]:
-                            raise KeyError  # done this one
+                            print('done this one', sequence_number)
+                            raise KeyError  # already processed done this one
                         elif sequence_number == (sequence_numbers[sensor_address] + 1):
                             sequence_numbers[sensor_address] = sequence_number
 
@@ -209,16 +210,16 @@ def main():
                             print('We have missed: ', number_missed, 'packets')
                             print('old seq. number:', sequence_numbers[sensor_address],
                                   'new seq. # :', sequence_number)
-                            # sequence_numbers[sensor_address] = sequence_number
 
                         print('done our checks')
                         data = [{"key": "missed-message-count", "value": number_missed}]
-                        data.extend(collect_data(a  # we have add this so reset for run
-                        start_time=time.monotonic()
+                        data.extend(collect_data(advertisement.data_dict[255]))
+
+                        start_time = time.monotonic()
                         print(group_key, data)
                         if create_data(group_key, data):
-                            sequence_numbers[sensor_address]=sequence_number
-                        duration=time.monotonic() - start_time
+                            sequence_numbers[sensor_address] = sequence_number
+                        duration = time.monotonic() - start_time
                         print("Done logging msmts. to IO. Took {:.6f} seconds"
                               .format(duration))
 
