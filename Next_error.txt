@@ -1,0 +1,10 @@
+posting stuff
+No joy in post ville
+Traceback (most recent call last):
+  File "./clue_bridge.py", line 243, in <module>
+    main()
+  File "./clue_bridge.py", line 227, in main
+    if create_data(group_key, data):
+  File "./clue_bridge.py", line 82, in create_data
+    if response.status_code == 429:
+AttributeError: 'bool' object has no attribute 'status_code'

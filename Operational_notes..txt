@@ -1,0 +1,88 @@
+﻿Captured with Wireshark:
+
+
+Frame 272: 37 bytes on wire (296 bits), 37 bytes captured (296 bits) on interface 0
+Bluetooth
+Bluetooth HCI H4
+Bluetooth HCI Event - LE Meta
+    Event Code: LE Meta (0x3e)
+    Parameter Total Length: 34
+    Sub Event: LE Advertising Report (0x02)
+    Num Reports: 1
+    Event Type: Scannable Undirected Advertising (0x02)
+    Peer Address Type: Random Device Address (0x01)
+    BD_ADDR: fb:e1:23:6b:2b:9f (fb:e1:23:6b:2b:9f)
+    Data Length: 22
+    Advertising Data
+        Manufacturer Specific
+            Length: 21
+            Type: Manufacturer Specific (0xff)
+            Company ID: Unknown (0x0822)
+            Data: 06040a98bfaf41060a0a9026c9420303008d
+                [Expert Info (Note/Undecoded): Undecoded]
+    RSSI: -65dBm
+
+from a simple scan program:
+
+Address(string="fb:e1:23:6b:2b:9f") <Advertisement  >
+	Advertisement(data=b"\x15\xff\x22\x08\x06\x04\x0a\x30\xcd\xb2\x41\x06\x0a\x0a\x70\x30\xc9\x42\x03\x03\x00\xcf")
+
+hex dump:
+
+0000   04 3e 22 02 01 02 01 9f 2b 6b 23 e1 fb 16 15 ff   .>".....+k#áû..ÿ
+0010   22 08 06 04 0a 00 96 b3 41 06 0a 0a 64 32 c9 42   "......³A...d2ÉB
+0020   03 03 00 d6 c7                                    ...ÖÇ
+
+note: the second line has the company ID in a byte swapped format.  The xff at the end of the first line (xff) indicates company data.  The x04 x0a in the second line is the code for temperature. The preceding x06 is the length of the first data block including the code for type. The next x06 is the length of the next data blob and x0a x0a is the code for pressure.
+Note 2: in the advertisement data the x15 is the total length of the remaining data blob.
+Note 3: format/structure changed, see below
+
+So. in order to get this to work I could have changed the Adafruit code  but chose to break it down myself.  All the codes in the Adafruit_ble_broadcastnet.py are byte swaped.
+
+The msmts.py contains a dict with the codes as received. I used a hard coded list of mac address in a list in the secrets.py file to capture the packets from my Clue ( the list is to allow for more sensors). I then check for the xff byte (manufacture data) then strip out the sensor type and data.
+
+Note: when using Wireshark you have to start something to get it to capture anything. I used bleak_scan.py to verify then ran my script to capture the data.
+
+Update:
+Adafruit changed the ordering of the data from the Clue:
+hex dump:
+0000   04 3e 29 02 01 02 01 9f 2b 6b 23 e1 fb 1d 1c ff
+0010   22 08 03 03 00 42 06 04 0a 00 92 9d 41 06 0a 0a
+0020   e4 6d cc 42 06 0b 0a f4 6a d4 41 d4
+
+the ff at the end of line 000 is the indicator for Manufacture Data.
+
+
+So the bytes we get start at x22 x08 which is the code for Adafruit.  The Adafruit_ble routines returns an advertisement that starts after the Manufacture Data flag .And can be accessed by: Advertisement.data_dict[255] and contains the Manufacture code.  Therefore start at byte 2 and store that in measurementBytes. 
+
+start = 2
+measurementBytes: bytes = data_bytes[start:len(data_bytes)]
+
+This is  x03 the length of the first datum. Wee then read the next two bytes as the code x03 x00, followed by the value x42.
+[measurementBytes is the variable I use to store the bytes.]
+
+
+
+value = struct.unpack_from(measurement[code][1], measurementBytes, offset=3)
+sequence-number is ‘B’ so:
+value = struct.unpack_from(‘B’, measurementBytes, offset=3)
+returns a list with a one byte value in it.
+
+This will unpack the byte, but stores it as a list.
+
+*** It is easier to chop down the list as you go , so I almost always split off the used up portion 
+measurementBytes = measurementBytes[3+(len(measurement[code][1])):]
+
+From the measurementCode.py dictionary you can find the sequence number followed by the format(one byte).  
+Next byte indicates the length of the next datum x06 or six bytes. Next two are x04 x0a, again the lookup gives us temperature with a float value(floats take 4 bytes) so x00 x92 x9d x41 are the values to unpack as a float.
+
+value = struct.unpack_from(measurement[code][1], measurementBytes, offset=3)
+temperature is ‘f’ so this becomes.
+value = struct.unpack_from(‘f, measurementBytes, offset=3)
+returns a list with a float in it.
+
+The unpack works with multi-value data like acceleration and magnetic.
+
+Adafruit.io site:
+
+https://io.adafruit.com/ltadab0x/dashboards/sensors

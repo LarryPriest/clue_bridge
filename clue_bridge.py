@@ -1,7 +1,14 @@
 #!/usr/bin/python3
-'''This example scans for any BLE advertisements and prints one advertisement and
-one scan response from every device found. This scan is more detailed than the
-simple test because it includes specialty advertising types.  from:
+'''clue_bridge.py
+Scans for any BLE advertisements from known MAC addresses, collects the key and
+data information and sends it to the io.adafruit account feed.
+account information, macaddr list are stored in 'secrets.py'.
+Key information in the 'measurementCode.py'. It contains a dictionary of code,
+name and format for some of the measurements. Other measurements can be found
+in 'adafruit_ble_broadcastnet.py'.
+see 'operational_notes.odt' for a more commplete analysis.
+
+From:
 https://circuitpython.readthedocs.io/projects/ble/en/latest/examples.html#detailed-scan
 started on nov 23/2020 - LTP
 '''
