@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # This example scans for any BLE advertisements and prints one advertisement and one scan
-#response from every device found. This scan is more detailed than the simple test because
+# response from every device found. This scan is more detailed than the simple test because
 # it includes specialty advertising types.  from:
 # https://circuitpython.readthedocs.io/projects/ble/en/latest/examples.html#detailed-scan
 # started on nov 23/2020 - LTP
@@ -93,9 +93,9 @@ def convert_to_feed_data(values, attribute_name, attribute_instance):
         key = attribute_name.replace("_", "-") + "-" + str(i)
         if isinstance(value, tuple):
             for j in range(attribute_instance.element_count):
-                feed_data.append({"key": key + "-" + attribute_instance.field_names[j], 
-                                "value": value[j], }
-                )
+                feed_data.append({"key": key + "-" + attribute_instance.field_names[j],
+                                  "value": value[j], }
+                                 )
         else:
             feed_data.append({"key": key, "value": value})
     return feed_data
@@ -157,7 +157,7 @@ while True:
                     dd = advertisement.data_dict[255]  # key[255] is data fleld
                     sm: bytes = dd[start:len(dd)]  # extract as bytes of dd
                     # the last entry of dd is a sequence number(2bytes for code one sn)
-                    while len(sm) > 3:  
+                    while len(sm) > 3:
                         start_index = sm[1]  # total bytes
                         fd = sm[2], sm[3]  # first measurment code
                         tt = bytes(fd).hex()  # convert bytes to hex
@@ -181,7 +181,7 @@ while True:
                                     feed_data.append(
                                         {"key": mt+'-'+var[x], 'value': val[x]})
 
-                        sm = sm[(start + sm[1]):len(sm)]  # drop the processed data 
+                        sm = sm[(start + sm[1]):len(sm)]  # drop the processed data
 
                 except KeyError:
                     pass
@@ -195,17 +195,17 @@ while True:
                         print('We have missed: ', number_missed, 'packets')
                         print('old seq. number:', sequence_numbers[sensor_address],
                               'new seq. # :', sn)
-                        
+
                         number_missed = 0
                 start_time = time.monotonic()
                 group_key = "bridge-{}-sensor-{}".format(bridge_address, sensor_address)
                 if sensor_address not in existing_feeds:
                     print("sensor not in existing feeds")
                     create_group("Bridge {} Sensor {}".format(
-                                                        bridge_address, sensor_address))
+                        bridge_address, sensor_address))
                     create_feed(group_key, "Missed Message Count")
                     existing_feeds[sensor_address] = ["missed-message-count"]
-                
+
                 for feed_data in data:
                     if feed_data["key"] not in existing_feeds[sensor_address]:
                         print("creating feed", feed_data['key'])
