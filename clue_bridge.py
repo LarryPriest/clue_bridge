@@ -36,18 +36,27 @@ def aio_post(path, **kwargs):
     '''Post the data collected'''
     kwargs["headers"] = aio_auth_header
     print("posting stuff")
-    temp_response = False
     try:
-        temp_response = requests.post(aio_base_url + path, **kwargs)
-    except requests.exceptions.ConnectionError:
-        print('No joy in post ville')
-    return temp_response
+        response = requests.post(aio_base_url + path, **kwargs)
+        print(response)
+        return response
+    except ConnectionError('could not connect'):
+        print('oopsy - aio-post Connection error, better try again later')
+        print(response.code)
+        return False
+    except Timeout('Some kind of timeout occurred'):
+        print('Timeout oopsy on aio_post')
+        print(response.code)
+        return False
+    except HttpError('Some kind of HttpError'):
+        print('HttpError try again later')
+        print(response.code)
+        return False
 
 
 def aio_get(path, **kwargs):
     '''Get the existing data feeds'''
     kwargs["headers"] = aio_auth_header
-    # ~ print("getting stuff")
     return requests.get(aio_base_url + path, **kwargs)
 
 
@@ -64,33 +73,42 @@ def create_group(name):
 
 def create_feed(group_key, name):
     '''Create a new data feed if one does not exist for our sensor'''
-    # ~ print("creating feed\n", name)
-    response = aio_post(
-        "/groups/{}/feeds".format(group_key), json={"feed": {"name": name}})
-    if response.status_code != 201:
-        print(name)
-        print(response.content)
-        print(response.status_code)
-        raise RuntimeError("unable to create new feed")
+    try:
+        response = aio_post("/groups/{}/feeds".format(group_key), json={"feed": {"name": name}})
+        if response.status_code != 201:
+            print(name)
+            print(response.content)
+            print(response.status_code)
+            raise RuntimeError("unable to create new feed")
+    except RuntimeError:
+        print('try again')
+        return False
     return response.json()["key"]
 
 
 def create_data(group_key, data):
     '''Create the data blob to be sent to io.adafruit.com. '''
-    print("groups {}/ndata/n{}".format(group_key, data))
-    response = aio_post("/groups/{}/data".format(group_key), json={"feeds": data})
-    if response.status_code == 429:
-        print("Throttled!")
+    try:
+        response = aio_post("/groups/{}/data".format(group_key), json={"feeds": data})
+        print(response.status_code)
+        if response.status_code == 429:
+            print("Throttled!")
+            return False
+        if response.status_code != 200:
+            print(response.status_code)
+            raise RuntimeError("unable to create new data")
+        response.close()
+    except RuntimeError:
+        print('unable to create data, RuntimeError')
+        response.close()
         return False
-    if response.status_code != 200:
-        print(response.status_code, response.json())
-        raise RuntimeError("unable to create new data")
-    response.close()
+
     return True
 
 
 def convert_to_feed_data(values, attribute_name, attribute_instance):
     '''Convert the Python data to io.adafruit format '''
+    print('\nconvert to feed data\n')
     feed_data = []
     # Wrap single value entries for enumeration.
     if not isinstance(values, tuple) or (
@@ -112,28 +130,44 @@ def retrieve_existing_feeds():
 
     print("Fetching existing feeds.")
     existing_feeds = {}
-    response = aio_get("/groups")
-    print("response\n", response)
-    for group in response.json():
-        if "-" not in group["key"]:
-            continue
-        pieces = group["key"].split("-")
-        if len(pieces) != 4 or pieces[0] != "bridge" or pieces[2] != "sensor":
-            continue
-        _, bridge, _, sensor_address = pieces
-        if bridge != bridge_address:
-            continue
-        existing_feeds[sensor_address] = []
-        for feed in group["feeds"]:
-            feed_key = feed["key"].split(".")[-1]
-            existing_feeds[sensor_address].append(feed_key)
-
-    print("existing feeds:\n", existing_feeds)
+    with aio_get("/groups") as response:
+        print("response\n", response)
+        for group in response.json():
+            if "-" not in group["key"]:
+                continue
+            pieces = group["key"].split("-")
+            if len(pieces) != 4 or pieces[0] != "bridge" or pieces[2] != "sensor":
+                continue
+            _, bridge, _, sensor_address = pieces
+            if bridge != bridge_address:
+                continue
+            existing_feeds[sensor_address] = []
+            for feed in group["feeds"]:
+                feed_key = feed["key"].split(".")[-1]
+                existing_feeds[sensor_address].append(feed_key)
+    # print the existing feeds found
+    for i in iter(existing_feeds):
+        print('sensor: ', i)
+        print('measurements:')
+        for j in iter(existing_feeds[i]):
+            print(j)
+    print('\n\n')
     return existing_feeds
+
+
+def pprintFeeds(group, feed_data):
+    '''Pretty print the data feed'''
+    print(group)
+    for i in iter(feed_data):
+        if isinstance(i['value'], int):
+            print('{:<20}        {}'.format(i['key'], i['value']))
+        else:
+            print('{:<20}        {:.2f}'.format(i['key'], i['value']))
 
 
 def collect_data(data_bytes):
     '''Convert the byte stream data to a dict. '''
+    print('\nconverting data')
     feed_data = []
     start = 2
     measurementBytes: bytes = data_bytes[start:len(data_bytes)]
@@ -172,13 +206,11 @@ def collect_data(data_bytes):
 
 def main():
     existing_feeds = retrieve_existing_feeds()
-
     sequence_numbers = {}
     for addr in macaddr:
         sequence_numbers[addr] = 0
     print("scanning for sensors")
     while True:
-
         try:
             number_missed = 0
             for advertisement in ble.start_scan():  # this one sort of works
@@ -194,23 +226,20 @@ def main():
                             create_feed(group_key, "Missed Message Count")
                             existing_feeds[sensor_address] = ["missed-message-count"]
                             sequence_numbers[sensor_address] = 0
-                        # checking for sequence number current the first data item
+                        # checking for sequence number currently the first data item
                         bytecode = advertisement.data_dict[255][3], advertisement.data_dict[255][4]
                         code = bytes(bytecode).hex()
                         if code not in measurement:
                             print('no valid measurement code')
                             raise KeyError
-
                         sequence_number = struct.unpack_from(
                             'B', advertisement.data_dict[255], offset=5)
                         sequence_number = sequence_number[0]
-
                         if sequence_number == sequence_numbers[sensor_address]:
                             print('done this one', sequence_number)
                             raise KeyError  # already processed done this one
                         elif sequence_number == (sequence_numbers[sensor_address] + 1):
                             sequence_numbers[sensor_address] = sequence_number
-
                         else:
                             number_missed = (sequence_number -
                                              sequence_numbers[sensor_address])
@@ -223,7 +252,7 @@ def main():
                         data.extend(collect_data(advertisement.data_dict[255]))
 
                         start_time = time.monotonic()
-                        print(group_key, data)
+                        pprintFeeds(group_key, data)
                         if create_data(group_key, data):
                             sequence_numbers[sensor_address] = sequence_number
                         duration = time.monotonic() - start_time
