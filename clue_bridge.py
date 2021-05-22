@@ -15,7 +15,7 @@ started on nov 23/2020 - LTP
 from adafruit_ble import BLERadio
 import sys
 import time
-from secrets import secrets
+from My_secrets import secrets
 import requests
 import adafruit_ble_broadcastnet
 import struct
@@ -27,7 +27,7 @@ ble = BLERadio()
 bridge_address = adafruit_ble_broadcastnet.device_address
 print("This is BroadcastNet bridge:", bridge_address)
 
-# io. adafruit creds.
+# io. adafruit credentials.
 aio_auth_header = {"X-AIO-KEY": secrets["aio_key"]}
 aio_base_url = "https://io.adafruit.com/api/v2/" + secrets["aio_username"]
 
@@ -38,30 +38,25 @@ def aio_post(path, **kwargs):
     print("posting stuff")
     try:
         response = requests.post(aio_base_url + path, **kwargs)
-        print(response)
+        print(response.status_code)
         return response
-    except ConnectionError('could not connect'):
+    except requests.exceptions.ConnectionError:
         print('oopsy - aio-post Connection error, better try again later')
-        print(response.code)
-        return False
-    except Timeout('Some kind of timeout occurred'):
-        print('Timeout oopsy on aio_post')
-        print(response.code)
-        return False
-    except HttpError('Some kind of HttpError'):
-        print('HttpError try again later')
-        print(response.code)
-        return False
-
+        return 0
 
 def aio_get(path, **kwargs):
     '''Get the existing data feeds'''
     kwargs["headers"] = aio_auth_header
-    return requests.get(aio_base_url + path, **kwargs)
+    try:
+        response = requests.get(aio_base_url + path, **kwargs)
+        return response
+    except requests.exceptions.ConnectionError as errorCode:
+        print('oopsy - aio-get Connection error, better try again later')
+        return 0
 
 
 def create_group(name):
-    '''Create a groub if the sensor package is not found'''
+    '''Create a group if the sensor package is not found'''
     response = aio_post("/groups", json={"name": name})
     if response.status_code != 201:
         print(name)
@@ -90,7 +85,7 @@ def create_data(group_key, data):
     '''Create the data blob to be sent to io.adafruit.com. '''
     try:
         response = aio_post("/groups/{}/data".format(group_key), json={"feeds": data})
-        print(response.status_code)
+#         print(response.status_code)
         if response.status_code == 429:
             print("Throttled!")
             return False
@@ -130,21 +125,21 @@ def retrieve_existing_feeds():
 
     print("Fetching existing feeds.")
     existing_feeds = {}
-    with aio_get("/groups") as response:
-        print("response\n", response)
-        for group in response.json():
-            if "-" not in group["key"]:
-                continue
-            pieces = group["key"].split("-")
-            if len(pieces) != 4 or pieces[0] != "bridge" or pieces[2] != "sensor":
-                continue
-            _, bridge, _, sensor_address = pieces
-            if bridge != bridge_address:
-                continue
-            existing_feeds[sensor_address] = []
-            for feed in group["feeds"]:
-                feed_key = feed["key"].split(".")[-1]
-                existing_feeds[sensor_address].append(feed_key)
+    response = aio_get("/groups")
+    print("response\n", response.status_code)
+    for group in response.json():
+        if "-" not in group["key"]:
+            continue
+        pieces = group["key"].split("-")
+        if len(pieces) != 4 or pieces[0] != "bridge" or pieces[2] != "sensor":
+            continue
+        _, bridge, _, sensor_address = pieces
+        if bridge != bridge_address:
+            continue
+        existing_feeds[sensor_address] = []
+        for feed in group["feeds"]:
+            feed_key = feed["key"].split(".")[-1]
+            existing_feeds[sensor_address].append(feed_key)
     # print the existing feeds found
     for i in iter(existing_feeds):
         print('sensor: ', i)
@@ -230,7 +225,7 @@ def main():
                         bytecode = advertisement.data_dict[255][3], advertisement.data_dict[255][4]
                         code = bytes(bytecode).hex()
                         if code not in measurement:
-                            print('no valid measurement code')
+                            print('no valid measurement code')  
                             raise KeyError
                         sequence_number = struct.unpack_from(
                             'B', advertisement.data_dict[255], offset=5)
